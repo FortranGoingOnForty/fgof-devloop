@@ -1,4 +1,12 @@
 module fgof_devloop
+  use fgof_watch_types, only : &
+    FGOF_WATCH_EVT_CREATED, &
+    FGOF_WATCH_EVT_MODIFIED, &
+    FGOF_WATCH_EVT_MOVED, &
+    FGOF_WATCH_EVT_NONE, &
+    FGOF_WATCH_EVT_REMOVED, &
+    watch_event, &
+    watch_options
   use fgof_devloop_types, only : &
     FGOF_DEVLOOP_DECISION_IDLE, &
     FGOF_DEVLOOP_DECISION_RESTART, &
@@ -12,7 +20,8 @@ module fgof_devloop
     devloop_decision, &
     devloop_options, &
     devloop_state, &
-    devloop_trigger
+    devloop_trigger, &
+    devloop_watch_summary
   implicit none
   private
 
@@ -24,6 +33,7 @@ module fgof_devloop
   public :: clear_devloop_options
   public :: clear_devloop_state
   public :: clear_devloop_trigger
+  public :: clear_devloop_watch_summary
   public :: devloop_backend_name
   public :: devloop_change_trigger
   public :: devloop_cycle
@@ -32,7 +42,12 @@ module fgof_devloop
   public :: devloop_options
   public :: devloop_start_trigger
   public :: devloop_state
+  public :: devloop_summarize_watch_events
   public :: devloop_trigger
+  public :: devloop_watch_failure_summary
+  public :: devloop_watch_options
+  public :: devloop_watch_summary
+  public :: devloop_watch_trigger
   public :: finish_devloop_cycle
   public :: FGOF_DEVLOOP_DECISION_IDLE
   public :: FGOF_DEVLOOP_DECISION_RESTART
@@ -53,8 +68,12 @@ contains
 
     options%run_on_start = .true.
     options%restart_on_change = .true.
+    options%restart_on_directory_change = .true.
+    options%ignore_hidden = .false.
     options%stop_on_failure = .false.
     options%max_failures = 0
+    options%min_restart_changes = 1
+    options%debounce_polls = 0
   end function clear_devloop_options
 
   function clear_devloop_trigger() result(trigger)
@@ -88,6 +107,24 @@ contains
     decision%should_stop = .false.
     decision%reason = ""
   end function clear_devloop_decision
+
+  function clear_devloop_watch_summary() result(summary)
+    type(devloop_watch_summary) :: summary
+
+    summary%event_count = 0
+    summary%change_count = 0
+    summary%file_change_count = 0
+    summary%directory_change_count = 0
+    summary%created_count = 0
+    summary%modified_count = 0
+    summary%removed_count = 0
+    summary%moved_count = 0
+    summary%ignored_none_count = 0
+    summary%watch_error_code = 0
+    summary%has_changes = .false.
+    summary%watch_failed = .false.
+    summary%watch_error_message = ""
+  end function clear_devloop_watch_summary
 
   function clear_devloop_state() result(state)
     type(devloop_state) :: state
@@ -165,6 +202,96 @@ contains
     end if
   end function devloop_manual_trigger
 
+  function devloop_summarize_watch_events(events) result(summary)
+    type(watch_event), intent(in) :: events(:)
+    type(devloop_watch_summary) :: summary
+    integer :: index_value
+
+    summary = clear_devloop_watch_summary()
+    summary%event_count = size(events)
+
+    do index_value = 1, size(events)
+      select case (events(index_value)%kind)
+      case (FGOF_WATCH_EVT_CREATED)
+        summary%created_count = summary%created_count + 1
+      case (FGOF_WATCH_EVT_MODIFIED)
+        summary%modified_count = summary%modified_count + 1
+      case (FGOF_WATCH_EVT_REMOVED)
+        summary%removed_count = summary%removed_count + 1
+      case (FGOF_WATCH_EVT_MOVED)
+        summary%moved_count = summary%moved_count + 1
+      case default
+        summary%ignored_none_count = summary%ignored_none_count + 1
+        cycle
+      end select
+
+      summary%change_count = summary%change_count + 1
+      if (events(index_value)%is_directory) then
+        summary%directory_change_count = summary%directory_change_count + 1
+      else
+        summary%file_change_count = summary%file_change_count + 1
+      end if
+    end do
+
+    summary%has_changes = summary%change_count > 0
+  end function devloop_summarize_watch_events
+
+  function devloop_watch_failure_summary(error_code, message) result(summary)
+    integer, intent(in) :: error_code
+    character(len=*), intent(in) :: message
+    type(devloop_watch_summary) :: summary
+
+    summary = clear_devloop_watch_summary()
+    summary%watch_error_code = error_code
+    summary%watch_failed = error_code /= 0
+    summary%watch_error_message = message
+  end function devloop_watch_failure_summary
+
+  function devloop_watch_options(options) result(watch_config)
+    type(devloop_options), intent(in), optional :: options
+    type(watch_options) :: watch_config
+    type(devloop_options) :: local_options
+
+    local_options = clear_devloop_options()
+    if (present(options)) local_options = options
+    call normalize_options(local_options)
+
+    watch_config = watch_options()
+    watch_config%debounce_polls = local_options%debounce_polls
+    watch_config%ignore_hidden = local_options%ignore_hidden
+    watch_config%emit_directory_events = local_options%restart_on_directory_change
+  end function devloop_watch_options
+
+  function devloop_watch_trigger(summary, options, reason) result(trigger)
+    type(devloop_watch_summary), intent(in) :: summary
+    type(devloop_options), intent(in), optional :: options
+    character(len=*), intent(in), optional :: reason
+    type(devloop_trigger) :: trigger
+    type(devloop_options) :: local_options
+    integer :: effective_change_count
+
+    trigger = clear_devloop_trigger()
+    if (summary%watch_failed) return
+    if (.not. summary%has_changes) return
+
+    local_options = clear_devloop_options()
+    if (present(options)) local_options = options
+    call normalize_options(local_options)
+
+    effective_change_count = summary%change_count
+    if (.not. local_options%restart_on_directory_change) then
+      effective_change_count = summary%file_change_count
+    end if
+
+    if (effective_change_count < local_options%min_restart_changes) return
+
+    if (present(reason)) then
+      trigger = devloop_change_trigger(effective_change_count, reason)
+    else
+      trigger = devloop_change_trigger(effective_change_count, "watch")
+    end if
+  end function devloop_watch_trigger
+
   function begin_devloop_cycle(state, trigger) result(cycle)
     type(devloop_state), intent(inout) :: state
     type(devloop_trigger), intent(in) :: trigger
@@ -239,6 +366,8 @@ contains
     type(devloop_options), intent(inout) :: options
 
     if (options%max_failures < 0) options%max_failures = 0
+    if (options%min_restart_changes < 1) options%min_restart_changes = 1
+    if (options%debounce_polls < 0) options%debounce_polls = 0
   end subroutine normalize_options
 
   logical function failure_limit_reached(state) result(reached)

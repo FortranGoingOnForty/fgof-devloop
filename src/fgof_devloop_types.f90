@@ -14,8 +14,12 @@ module fgof_devloop_types
   type, public :: devloop_options
     logical :: run_on_start = .true.
     logical :: restart_on_change = .true.
+    logical :: restart_on_directory_change = .true.
+    logical :: ignore_hidden = .false.
     logical :: stop_on_failure = .false.
     integer :: max_failures = 0
+    integer :: min_restart_changes = 1
+    integer :: debounce_polls = 0
   end type devloop_options
 
   type, public :: devloop_trigger
@@ -43,6 +47,22 @@ module fgof_devloop_types
     logical :: should_stop = .false.
     character(len=:), allocatable :: reason
   end type devloop_decision
+
+  type, public :: devloop_watch_summary
+    integer :: event_count = 0
+    integer :: change_count = 0
+    integer :: file_change_count = 0
+    integer :: directory_change_count = 0
+    integer :: created_count = 0
+    integer :: modified_count = 0
+    integer :: removed_count = 0
+    integer :: moved_count = 0
+    integer :: ignored_none_count = 0
+    integer :: watch_error_code = 0
+    logical :: has_changes = .false.
+    logical :: watch_failed = .false.
+    character(len=:), allocatable :: watch_error_message
+  end type devloop_watch_summary
 
   type, public :: devloop_state
     type(devloop_options) :: options
