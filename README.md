@@ -20,7 +20,7 @@ Current v1 target:
 
 ## Status
 
-Sprint 01 is in place.
+Sprint 02 is in place.
 
 Tracked today:
 
@@ -29,7 +29,10 @@ Tracked today:
 - stable option, trigger, cycle, decision, and state types
 - pure run-cycle helpers for start, finish, stop, and restart decisions
 - deterministic failure policy through `stop_on_failure` and `max_failures`
-- focused model coverage in `fpm test`
+- `fgof-watch` integration through shaped event summaries and trigger policy
+- loop-owned restart filters for directory events and minimum change counts
+- watch option projection for debounce polls, hidden-path ignores, and directory-event emission
+- focused model and watch-bridge coverage in `fpm test`
 
 ## Public API Shape
 
@@ -44,6 +47,7 @@ Current public procedures:
 - `clear_devloop_trigger`
 - `clear_devloop_cycle`
 - `clear_devloop_decision`
+- `clear_devloop_watch_summary`
 - `devloop_backend_name`
 - `clear_devloop_state`
 - `start_devloop`
@@ -52,17 +56,35 @@ Current public procedures:
 - `devloop_start_trigger`
 - `devloop_change_trigger`
 - `devloop_manual_trigger`
+- `devloop_summarize_watch_events`
+- `devloop_watch_failure_summary`
+- `devloop_watch_options`
+- `devloop_watch_trigger`
 - `begin_devloop_cycle`
 - `finish_devloop_cycle`
 
 Current semantics:
 
-- `devloop_options` carries run-on-start, restart-on-change, stop-on-failure, and max-failure policy
+- `devloop_options` carries run-on-start, restart-on-change, directory restart, hidden-path ignore, debounce, stop-on-failure, and max-failure policy
 - `devloop_trigger` records why work should begin, such as start, file change, or manual request
+- `devloop_watch_summary` condenses `fgof-watch` event batches into file, directory, create, modify, remove, move, ignored, and failure counters
+- `devloop_watch_options()` projects dev-loop policy into `fgof-watch` options for debounce polls, hidden-path filtering, and directory event emission
+- `devloop_watch_trigger()` turns successful watch summaries into change triggers while suppressing watcher failures, empty batches, directory-only batches when disabled, and batches below `min_restart_changes`
 - `begin_devloop_cycle()` increments the cycle counter and starts work only when the loop is active, idle, and policy permits the trigger
 - `finish_devloop_cycle()` records success or failure and returns an explicit decision to idle, restart, or stop
 - negative `max_failures` values normalize to unlimited failures
-- Sprint 01 is intentionally process-free so later watch and process integration can build on deterministic state transitions
+- negative `debounce_polls` values normalize to no debounce
+- Sprint 02 is intentionally process-free so later process and job integration can build on deterministic state transitions
+
+## Dependency
+
+`fgof-devloop` depends on `fgof-watch` `v0.1.0` for watch-event types and
+watch option projection:
+
+```toml
+[dependencies]
+fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
+```
 
 ## Build And Test
 
