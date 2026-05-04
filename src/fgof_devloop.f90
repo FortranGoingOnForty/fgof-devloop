@@ -1,4 +1,10 @@
 module fgof_devloop
+  use fgof_process, only : &
+    FGOF_PROCESS_OK, &
+    process_command, &
+    process_options, &
+    process_result, &
+    run_process => run
   use fgof_watch_types, only : &
     FGOF_WATCH_EVT_CREATED, &
     FGOF_WATCH_EVT_MODIFIED, &
@@ -12,14 +18,21 @@ module fgof_devloop
     FGOF_DEVLOOP_DECISION_RESTART, &
     FGOF_DEVLOOP_DECISION_RUN, &
     FGOF_DEVLOOP_DECISION_STOP, &
+    FGOF_DEVLOOP_COMMAND_BUILD, &
+    FGOF_DEVLOOP_COMMAND_NONE, &
+    FGOF_DEVLOOP_COMMAND_RUN, &
+    FGOF_DEVLOOP_COMMAND_SMOKE, &
     FGOF_DEVLOOP_TRIGGER_CHANGE, &
     FGOF_DEVLOOP_TRIGGER_MANUAL, &
     FGOF_DEVLOOP_TRIGGER_NONE, &
     FGOF_DEVLOOP_TRIGGER_START, &
+    devloop_command_result, &
+    devloop_command_spec, &
     devloop_cycle, &
     devloop_decision, &
     devloop_options, &
     devloop_state, &
+    devloop_supervision_result, &
     devloop_trigger, &
     devloop_watch_summary
   implicit none
@@ -28,20 +41,29 @@ module fgof_devloop
   character(len=*), parameter :: FGOF_DEVLOOP_BACKEND_MODEL = "model"
 
   public :: begin_devloop_cycle
+  public :: clear_devloop_command_result
+  public :: clear_devloop_command_spec
   public :: clear_devloop_cycle
   public :: clear_devloop_decision
   public :: clear_devloop_options
   public :: clear_devloop_state
+  public :: clear_devloop_supervision_result
   public :: clear_devloop_trigger
   public :: clear_devloop_watch_summary
   public :: devloop_backend_name
+  public :: devloop_build_command
   public :: devloop_change_trigger
+  public :: devloop_command_result
+  public :: devloop_command_spec
   public :: devloop_cycle
   public :: devloop_decision
   public :: devloop_manual_trigger
   public :: devloop_options
+  public :: devloop_run_command
+  public :: devloop_smoke_command
   public :: devloop_start_trigger
   public :: devloop_state
+  public :: devloop_supervision_result
   public :: devloop_summarize_watch_events
   public :: devloop_trigger
   public :: devloop_watch_failure_summary
@@ -53,10 +75,16 @@ module fgof_devloop
   public :: FGOF_DEVLOOP_DECISION_RESTART
   public :: FGOF_DEVLOOP_DECISION_RUN
   public :: FGOF_DEVLOOP_DECISION_STOP
+  public :: FGOF_DEVLOOP_COMMAND_BUILD
+  public :: FGOF_DEVLOOP_COMMAND_NONE
+  public :: FGOF_DEVLOOP_COMMAND_RUN
+  public :: FGOF_DEVLOOP_COMMAND_SMOKE
   public :: FGOF_DEVLOOP_TRIGGER_CHANGE
   public :: FGOF_DEVLOOP_TRIGGER_MANUAL
   public :: FGOF_DEVLOOP_TRIGGER_NONE
   public :: FGOF_DEVLOOP_TRIGGER_START
+  public :: run_devloop_command
+  public :: run_devloop_cycle
   public :: should_start_on_open
   public :: start_devloop
   public :: stop_devloop
@@ -125,6 +153,50 @@ contains
     summary%watch_failed = .false.
     summary%watch_error_message = ""
   end function clear_devloop_watch_summary
+
+  function clear_devloop_command_spec() result(spec)
+    type(devloop_command_spec) :: spec
+
+    spec%kind = FGOF_DEVLOOP_COMMAND_NONE
+    spec%enabled = .false.
+    spec%options = process_options()
+    spec%label = ""
+  end function clear_devloop_command_spec
+
+  function clear_devloop_command_result() result(command_result)
+    type(devloop_command_result) :: command_result
+
+    command_result%kind = FGOF_DEVLOOP_COMMAND_NONE
+    command_result%requested = .false.
+    command_result%skipped = .true.
+    command_result%launched = .false.
+    command_result%completed = .false.
+    command_result%succeeded = .false.
+    command_result%timed_out = .false.
+    command_result%exit_code = 0
+    command_result%process_error_code = FGOF_PROCESS_OK
+    command_result%process = clear_process_result()
+    command_result%label = ""
+    command_result%error_message = ""
+  end function clear_devloop_command_result
+
+  function clear_devloop_supervision_result() result(supervision)
+    type(devloop_supervision_result) :: supervision
+
+    supervision%cycle = clear_devloop_cycle()
+    supervision%decision = clear_devloop_decision()
+    supervision%build = clear_devloop_command_result()
+    supervision%run = clear_devloop_command_result()
+    supervision%smoke = clear_devloop_command_result()
+    supervision%command_count = 0
+    supervision%failed_command_kind = FGOF_DEVLOOP_COMMAND_NONE
+    supervision%last_exit_code = 0
+    supervision%process_error_code = FGOF_PROCESS_OK
+    supervision%started = .false.
+    supervision%succeeded = .false.
+    supervision%failed = .false.
+    supervision%timed_out = .false.
+  end function clear_devloop_supervision_result
 
   function clear_devloop_state() result(state)
     type(devloop_state) :: state
@@ -201,6 +273,33 @@ contains
       trigger%reason = "manual"
     end if
   end function devloop_manual_trigger
+
+  function devloop_build_command(command_value, options, label) result(spec)
+    type(process_command), intent(in) :: command_value
+    type(process_options), intent(in), optional :: options
+    character(len=*), intent(in), optional :: label
+    type(devloop_command_spec) :: spec
+
+    spec = make_devloop_command(FGOF_DEVLOOP_COMMAND_BUILD, command_value, options, label)
+  end function devloop_build_command
+
+  function devloop_run_command(command_value, options, label) result(spec)
+    type(process_command), intent(in) :: command_value
+    type(process_options), intent(in), optional :: options
+    character(len=*), intent(in), optional :: label
+    type(devloop_command_spec) :: spec
+
+    spec = make_devloop_command(FGOF_DEVLOOP_COMMAND_RUN, command_value, options, label)
+  end function devloop_run_command
+
+  function devloop_smoke_command(command_value, options, label) result(spec)
+    type(process_command), intent(in) :: command_value
+    type(process_options), intent(in), optional :: options
+    character(len=*), intent(in), optional :: label
+    type(devloop_command_spec) :: spec
+
+    spec = make_devloop_command(FGOF_DEVLOOP_COMMAND_SMOKE, command_value, options, label)
+  end function devloop_smoke_command
 
   function devloop_summarize_watch_events(events) result(summary)
     type(watch_event), intent(in) :: events(:)
@@ -292,6 +391,71 @@ contains
     end if
   end function devloop_watch_trigger
 
+  function run_devloop_command(spec) result(command_result)
+    type(devloop_command_spec), intent(in) :: spec
+    type(devloop_command_result) :: command_result
+    type(process_result) :: process_run_result
+
+    command_result = clear_devloop_command_result()
+    command_result%kind = spec%kind
+    command_result%label = command_kind_label(spec%kind)
+    if (allocated(spec%label)) then
+      if (len(spec%label) > 0) command_result%label = spec%label
+    end if
+
+    if (.not. spec%enabled) return
+
+    command_result%requested = .true.
+    command_result%skipped = .false.
+    process_run_result = run_process(spec%command, spec%options)
+    command_result%process = process_run_result
+    command_result%launched = process_run_result%launched
+    command_result%completed = process_run_result%completed
+    command_result%timed_out = process_run_result%timed_out
+    command_result%exit_code = process_run_result%exit_code
+    command_result%process_error_code = process_run_result%error_code
+    command_result%error_message = process_run_result%error_message
+    command_result%succeeded = process_run_result%error_code == FGOF_PROCESS_OK .and. &
+                               process_run_result%completed .and. &
+                               process_run_result%exited_normally .and. &
+                               process_run_result%exit_code == 0
+  end function run_devloop_command
+
+  function run_devloop_cycle(state, trigger, build_command, run_command, smoke_command) result(supervision)
+    type(devloop_state), intent(inout) :: state
+    type(devloop_trigger), intent(in) :: trigger
+    type(devloop_command_spec), intent(in), optional :: build_command
+    type(devloop_command_spec), intent(in), optional :: run_command
+    type(devloop_command_spec), intent(in), optional :: smoke_command
+    type(devloop_supervision_result) :: supervision
+    logical :: should_continue
+
+    supervision = clear_devloop_supervision_result()
+    supervision%cycle = begin_devloop_cycle(state, trigger)
+    supervision%started = supervision%cycle%started
+    if (.not. supervision%started) return
+
+    should_continue = .true.
+    if (present(build_command)) then
+      supervision%build = run_devloop_command(build_command)
+      call record_supervised_command(supervision, supervision%build, should_continue)
+    end if
+
+    if (should_continue .and. present(run_command)) then
+      supervision%run = run_devloop_command(run_command)
+      call record_supervised_command(supervision, supervision%run, should_continue)
+    end if
+
+    if (should_continue .and. present(smoke_command)) then
+      supervision%smoke = run_devloop_command(smoke_command)
+      call record_supervised_command(supervision, supervision%smoke, should_continue)
+    end if
+
+    supervision%succeeded = should_continue
+    supervision%failed = .not. should_continue
+    supervision%decision = finish_devloop_cycle(state, supervision%succeeded, supervision%last_exit_code)
+  end function run_devloop_cycle
+
   function begin_devloop_cycle(state, trigger) result(cycle)
     type(devloop_state), intent(inout) :: state
     type(devloop_trigger), intent(in) :: trigger
@@ -361,6 +525,76 @@ contains
 
     name = FGOF_DEVLOOP_BACKEND_MODEL
   end function devloop_backend_name
+
+  function make_devloop_command(kind, command_value, options, label) result(spec)
+    integer, intent(in) :: kind
+    type(process_command), intent(in) :: command_value
+    type(process_options), intent(in), optional :: options
+    character(len=*), intent(in), optional :: label
+    type(devloop_command_spec) :: spec
+
+    spec = clear_devloop_command_spec()
+    spec%kind = kind
+    spec%enabled = .true.
+    spec%command = command_value
+    spec%options = process_options()
+    if (present(options)) spec%options = options
+    if (present(label)) then
+      spec%label = label
+    else
+      spec%label = command_kind_label(kind)
+    end if
+  end function make_devloop_command
+
+  function clear_process_result() result(process_run_result)
+    type(process_result) :: process_run_result
+
+    process_run_result%launched = .false.
+    process_run_result%completed = .false.
+    process_run_result%timed_out = .false.
+    process_run_result%exited_normally = .false.
+    process_run_result%exit_code = -1
+    process_run_result%term_signal = 0
+    process_run_result%stdout = ""
+    process_run_result%stderr = ""
+    process_run_result%error_code = FGOF_PROCESS_OK
+    process_run_result%error_message = ""
+    process_run_result%elapsed_ms = 0
+  end function clear_process_result
+
+  function command_kind_label(kind) result(label)
+    integer, intent(in) :: kind
+    character(len=:), allocatable :: label
+
+    select case (kind)
+    case (FGOF_DEVLOOP_COMMAND_BUILD)
+      label = "build"
+    case (FGOF_DEVLOOP_COMMAND_RUN)
+      label = "run"
+    case (FGOF_DEVLOOP_COMMAND_SMOKE)
+      label = "smoke"
+    case default
+      label = "none"
+    end select
+  end function command_kind_label
+
+  subroutine record_supervised_command(supervision, command_result, should_continue)
+    type(devloop_supervision_result), intent(inout) :: supervision
+    type(devloop_command_result), intent(in) :: command_result
+    logical, intent(inout) :: should_continue
+
+    if (.not. command_result%requested) return
+
+    supervision%command_count = supervision%command_count + 1
+    supervision%last_exit_code = command_result%exit_code
+
+    if (command_result%succeeded) return
+
+    should_continue = .false.
+    supervision%failed_command_kind = command_result%kind
+    supervision%process_error_code = command_result%process_error_code
+    supervision%timed_out = command_result%timed_out
+  end subroutine record_supervised_command
 
   subroutine normalize_options(options)
     type(devloop_options), intent(inout) :: options

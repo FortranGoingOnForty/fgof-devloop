@@ -1,4 +1,9 @@
 module fgof_devloop_types
+  use fgof_process_types, only : &
+    FGOF_PROCESS_OK, &
+    process_command, &
+    process_options, &
+    process_result
   implicit none
   private
 
@@ -10,6 +15,14 @@ module fgof_devloop_types
   integer, parameter, public :: FGOF_DEVLOOP_DECISION_RUN = 1
   integer, parameter, public :: FGOF_DEVLOOP_DECISION_RESTART = 2
   integer, parameter, public :: FGOF_DEVLOOP_DECISION_STOP = 3
+  integer, parameter, public :: FGOF_DEVLOOP_COMMAND_NONE = 0
+  integer, parameter, public :: FGOF_DEVLOOP_COMMAND_BUILD = 1
+  integer, parameter, public :: FGOF_DEVLOOP_COMMAND_RUN = 2
+  integer, parameter, public :: FGOF_DEVLOOP_COMMAND_SMOKE = 3
+
+  public :: process_command
+  public :: process_options
+  public :: process_result
 
   type, public :: devloop_options
     logical :: run_on_start = .true.
@@ -63,6 +76,45 @@ module fgof_devloop_types
     logical :: watch_failed = .false.
     character(len=:), allocatable :: watch_error_message
   end type devloop_watch_summary
+
+  type, public :: devloop_command_spec
+    integer :: kind = FGOF_DEVLOOP_COMMAND_NONE
+    logical :: enabled = .false.
+    type(process_command) :: command
+    type(process_options) :: options
+    character(len=:), allocatable :: label
+  end type devloop_command_spec
+
+  type, public :: devloop_command_result
+    integer :: kind = FGOF_DEVLOOP_COMMAND_NONE
+    logical :: requested = .false.
+    logical :: skipped = .true.
+    logical :: launched = .false.
+    logical :: completed = .false.
+    logical :: succeeded = .false.
+    logical :: timed_out = .false.
+    integer :: exit_code = 0
+    integer :: process_error_code = FGOF_PROCESS_OK
+    type(process_result) :: process
+    character(len=:), allocatable :: label
+    character(len=:), allocatable :: error_message
+  end type devloop_command_result
+
+  type, public :: devloop_supervision_result
+    type(devloop_cycle) :: cycle
+    type(devloop_decision) :: decision
+    type(devloop_command_result) :: build
+    type(devloop_command_result) :: run
+    type(devloop_command_result) :: smoke
+    integer :: command_count = 0
+    integer :: failed_command_kind = FGOF_DEVLOOP_COMMAND_NONE
+    integer :: last_exit_code = 0
+    integer :: process_error_code = FGOF_PROCESS_OK
+    logical :: started = .false.
+    logical :: succeeded = .false.
+    logical :: failed = .false.
+    logical :: timed_out = .false.
+  end type devloop_supervision_result
 
   type, public :: devloop_state
     type(devloop_options) :: options
