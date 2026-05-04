@@ -20,7 +20,7 @@ Current v1 target:
 
 ## Status
 
-Sprint 02 is in place.
+Sprint 03 is in place.
 
 Tracked today:
 
@@ -32,7 +32,9 @@ Tracked today:
 - `fgof-watch` integration through shaped event summaries and trigger policy
 - loop-owned restart filters for directory events and minimum change counts
 - watch option projection for debounce polls, hidden-path ignores, and directory-event emission
-- focused model and watch-bridge coverage in `fpm test`
+- `fgof-process` integration for one-shot build, run, and smoke command supervision
+- command results that retain full `process_result` output, exit, timeout, and error detail
+- focused model, watch-bridge, and process-supervision coverage in `fpm test`
 
 ## Public API Shape
 
@@ -48,6 +50,9 @@ Current public procedures:
 - `clear_devloop_cycle`
 - `clear_devloop_decision`
 - `clear_devloop_watch_summary`
+- `clear_devloop_command_spec`
+- `clear_devloop_command_result`
+- `clear_devloop_supervision_result`
 - `devloop_backend_name`
 - `clear_devloop_state`
 - `start_devloop`
@@ -60,6 +65,11 @@ Current public procedures:
 - `devloop_watch_failure_summary`
 - `devloop_watch_options`
 - `devloop_watch_trigger`
+- `devloop_build_command`
+- `devloop_run_command`
+- `devloop_smoke_command`
+- `run_devloop_command`
+- `run_devloop_cycle`
 - `begin_devloop_cycle`
 - `finish_devloop_cycle`
 
@@ -70,19 +80,24 @@ Current semantics:
 - `devloop_watch_summary` condenses `fgof-watch` event batches into file, directory, create, modify, remove, move, ignored, and failure counters
 - `devloop_watch_options()` projects dev-loop policy into `fgof-watch` options for debounce polls, hidden-path filtering, and directory event emission
 - `devloop_watch_trigger()` turns successful watch summaries into change triggers while suppressing watcher failures, empty batches, directory-only batches when disabled, and batches below `min_restart_changes`
+- `devloop_build_command()`, `devloop_run_command()`, and `devloop_smoke_command()` wrap `fgof-process` commands with loop roles and optional process options
+- `run_devloop_command()` executes one command spec and preserves the raw `process_result`, including stdout, stderr, exit code, timeout state, and process error details
+- `run_devloop_cycle()` starts a cycle, executes enabled build/run/smoke specs in order, skips later specs after the first failure, and feeds the outcome into `finish_devloop_cycle()`
 - `begin_devloop_cycle()` increments the cycle counter and starts work only when the loop is active, idle, and policy permits the trigger
 - `finish_devloop_cycle()` records success or failure and returns an explicit decision to idle, restart, or stop
 - negative `max_failures` values normalize to unlimited failures
 - negative `debounce_polls` values normalize to no debounce
-- Sprint 02 is intentionally process-free so later process and job integration can build on deterministic state transitions
+- Sprint 03 is intentionally one-shot and synchronous; long-running process groups and cleanup orchestration belong to the later jobs layer
 
 ## Dependency
 
 `fgof-devloop` depends on `fgof-watch` `v0.1.0` for watch-event types and
-watch option projection:
+watch option projection, and `fgof-process` `v0.1.0` for one-shot process
+execution:
 
 ```toml
 [dependencies]
+fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", tag = "v0.1.0" }
 fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
 ```
 
