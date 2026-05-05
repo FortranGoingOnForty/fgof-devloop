@@ -68,3 +68,6 @@ jobs:
 
       - name: Run test suite
         run: fpm test --verbose
+
+      - name: Run examples
+        run: fpm run --example --all

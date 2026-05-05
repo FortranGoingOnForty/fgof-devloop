@@ -9,7 +9,7 @@ description = "Watch-driven development loop helpers for modern Fortran tools"
 [build]
 auto-executables = false
 auto-tests = true
-auto-examples = false
+auto-examples = true
 
 [install]
 library = true
