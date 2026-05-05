@@ -83,6 +83,13 @@ contains
 
     if (.not. plan%terminal_handoff_required) error stop "foreground jobs should surface terminal handoff"
     if (.not. plan%should_release) error stop "release-on-handoff should be explicit"
+    if (plan%action /= FGOF_DEVLOOP_JOB_ACTION_NONE) error stop "release-on-handoff should not restart"
+    if (plan%should_stop) error stop "release-on-handoff should not stop the job"
+    if (plan%should_start) error stop "release-on-handoff should not start a replacement"
+    if (plan%should_restart) error stop "release-on-handoff should not request restart"
+    if (plan%reason /= "release for terminal handoff") then
+      error stop "release-on-handoff reason should be explicit"
+    end if
   end subroutine test_terminal_handoff_plan
 
   subroutine test_pipeline_wait_observation()

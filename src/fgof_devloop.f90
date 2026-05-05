@@ -354,8 +354,10 @@ contains
     type(devloop_trigger) :: trigger
 
     trigger = clear_devloop_trigger()
+    if (change_count <= 0) return
+
     trigger%kind = FGOF_DEVLOOP_TRIGGER_CHANGE
-    trigger%change_count = max(0, change_count)
+    trigger%change_count = change_count
     if (present(reason)) then
       trigger%reason = reason
     else
@@ -693,6 +695,8 @@ contains
 
     if (job_state%terminal_handoff_required .and. job_state%spec%release_on_handoff) then
       plan%should_release = .true.
+      plan%reason = "release for terminal handoff"
+      return
     end if
 
     if (job_state%running .or. job_state%stopped .or. job_state%cleanup_needed) then

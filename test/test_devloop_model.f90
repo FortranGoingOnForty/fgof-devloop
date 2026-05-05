@@ -4,6 +4,7 @@ program test_devloop_model
     FGOF_DEVLOOP_DECISION_RESTART, &
     FGOF_DEVLOOP_DECISION_STOP, &
     FGOF_DEVLOOP_TRIGGER_CHANGE, &
+    FGOF_DEVLOOP_TRIGGER_NONE, &
     FGOF_DEVLOOP_TRIGGER_START, &
     begin_devloop_cycle, &
     clear_devloop_options, &
@@ -15,13 +16,14 @@ program test_devloop_model
     should_start_on_open, &
     start_devloop, &
     stop_devloop
-  use fgof_devloop_types, only : devloop_cycle, devloop_decision, devloop_options, devloop_state
+  use fgof_devloop_types, only : devloop_cycle, devloop_decision, devloop_options, devloop_state, devloop_trigger
   implicit none
 
   type(devloop_state) :: state
   type(devloop_options) :: options
   type(devloop_cycle) :: cycle
   type(devloop_decision) :: decision
+  type(devloop_trigger) :: trigger
 
   state = clear_devloop_state()
   call start_devloop(state)
@@ -47,6 +49,18 @@ program test_devloop_model
   if (decision%kind /= FGOF_DEVLOOP_DECISION_RESTART) error stop "failed cycle should restart by default"
   if (.not. decision%should_run) error stop "restart decision should request another run"
   if (state%consecutive_failures /= 1) error stop "failed cycle should increment failure count"
+
+  call start_devloop(state)
+  trigger = devloop_change_trigger(0)
+  if (trigger%kind /= FGOF_DEVLOOP_TRIGGER_NONE) then
+    error stop "zero-count change trigger should be suppressed"
+  end if
+  trigger = devloop_change_trigger(-2)
+  if (trigger%kind /= FGOF_DEVLOOP_TRIGGER_NONE) then
+    error stop "negative-count change trigger should be suppressed"
+  end if
+  cycle = begin_devloop_cycle(state, devloop_change_trigger(0))
+  if (cycle%started) error stop "zero-count changes should not start a cycle"
 
   options = clear_devloop_options()
   options%restart_on_change = .false.

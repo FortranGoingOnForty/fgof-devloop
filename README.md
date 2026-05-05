@@ -95,13 +95,14 @@ Current semantics:
 - `devloop_watch_summary` condenses `fgof-watch` event batches into file, directory, create, modify, remove, move, ignored, and failure counters
 - `devloop_watch_options()` projects dev-loop policy into `fgof-watch` options for debounce polls, hidden-path filtering, and directory event emission
 - `devloop_watch_trigger()` turns successful watch summaries into change triggers while suppressing watcher failures, disabled restart-on-change policy, empty batches, directory-only batches when disabled, and batches below `min_restart_changes`
+- `devloop_change_trigger()` suppresses nonpositive change counts so empty batches cannot start cycles through the lower-level trigger API
 - `devloop_build_command()`, `devloop_run_command()`, and `devloop_smoke_command()` wrap `fgof-process` commands with loop roles and optional process options
 - `run_devloop_command()` executes one command spec and preserves the raw `process_result`, including stdout, stderr, exit code, timeout state, and process error details
 - `run_devloop_cycle()` starts a cycle, executes enabled build/run/smoke specs in order, skips later specs after the first failure, and feeds the outcome into `finish_devloop_cycle()`
 - `devloop_service_job()` builds a long-running service/job spec backed by `fgof-jobs`
 - `attach_devloop_job()` records an already-launched pid/process group and ownership expectations
 - `observe_devloop_job()` applies `fgof-jobs` wait results while preserving member-level terminal state
-- `devloop_job_restart_plan()` models whether a watched change should stop, start, restart, release, or require terminal handoff for a long-running job; released jobs return no action
+- `devloop_job_restart_plan()` models whether a watched change should stop, start, restart, release, or require terminal handoff for a long-running job; released jobs and release-on-handoff plans return no stop/start/restart action
 - `begin_devloop_cycle()` increments the cycle counter and starts work only when the loop is active, idle, and policy permits the trigger
 - `finish_devloop_cycle()` records success or failure and returns an explicit decision to idle, restart, or stop
 - negative `max_failures` values normalize to unlimited failures
