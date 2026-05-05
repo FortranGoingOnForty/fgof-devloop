@@ -75,6 +75,13 @@ program test_devloop_watch
   if (trigger%change_count /= 4) error stop "watch trigger should carry the change count"
 
   options = clear_devloop_options()
+  options%restart_on_change = .false.
+  trigger = devloop_watch_trigger(summary, options)
+  if (trigger%kind /= FGOF_DEVLOOP_TRIGGER_NONE) then
+    error stop "restart-on-change policy should suppress watch triggers"
+  end if
+
+  options = clear_devloop_options()
   options%restart_on_directory_change = .false.
   options%min_restart_changes = 4
   trigger = devloop_watch_trigger(summary, options)

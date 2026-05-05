@@ -1,5 +1,6 @@
 program test_devloop_jobs
   use fgof_devloop, only : &
+    FGOF_DEVLOOP_JOB_ACTION_NONE, &
     FGOF_DEVLOOP_JOB_ACTION_RESTART, &
     FGOF_DEVLOOP_JOB_ACTION_START, &
     attach_devloop_job, &
@@ -60,6 +61,13 @@ contains
     if (.not. job%released) error stop "release should mark devloop job released"
     if (job%cleanup_needed) error stop "release should clear cleanup obligations"
     if (.not. job%running) error stop "release should not alter runtime state"
+
+    plan = devloop_job_restart_plan(job, devloop_change_trigger(1, "source changed"))
+    if (plan%action /= FGOF_DEVLOOP_JOB_ACTION_NONE) error stop "released job should not plan action"
+    if (plan%should_stop) error stop "released job should not stop"
+    if (plan%should_start) error stop "released job should not start"
+    if (plan%should_restart) error stop "released job should not restart"
+    if (plan%reason /= "job released") error stop "released job reason should be explicit"
   end subroutine test_service_restart_plan
 
   subroutine test_terminal_handoff_plan()

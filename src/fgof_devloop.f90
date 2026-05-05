@@ -536,6 +536,8 @@ contains
     if (present(options)) local_options = options
     call normalize_options(local_options)
 
+    if (.not. local_options%restart_on_change) return
+
     effective_change_count = summary%change_count
     if (.not. local_options%restart_on_directory_change) then
       effective_change_count = summary%file_change_count
@@ -684,6 +686,10 @@ contains
     if (.not. job_state%spec%enabled) return
     if (.not. job_state%configured) return
     if (trigger%kind == FGOF_DEVLOOP_TRIGGER_NONE) return
+    if (job_state%released) then
+      plan%reason = "job released"
+      return
+    end if
 
     if (job_state%terminal_handoff_required .and. job_state%spec%release_on_handoff) then
       plan%should_release = .true.
