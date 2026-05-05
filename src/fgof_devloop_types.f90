@@ -1,4 +1,8 @@
 module fgof_devloop_types
+  use fgof_jobs_types, only : &
+    job_handle, &
+    job_result, &
+    job_spec
   use fgof_process_types, only : &
     FGOF_PROCESS_OK, &
     process_command, &
@@ -19,7 +23,14 @@ module fgof_devloop_types
   integer, parameter, public :: FGOF_DEVLOOP_COMMAND_BUILD = 1
   integer, parameter, public :: FGOF_DEVLOOP_COMMAND_RUN = 2
   integer, parameter, public :: FGOF_DEVLOOP_COMMAND_SMOKE = 3
+  integer, parameter, public :: FGOF_DEVLOOP_JOB_ACTION_NONE = 0
+  integer, parameter, public :: FGOF_DEVLOOP_JOB_ACTION_START = 1
+  integer, parameter, public :: FGOF_DEVLOOP_JOB_ACTION_STOP = 2
+  integer, parameter, public :: FGOF_DEVLOOP_JOB_ACTION_RESTART = 3
 
+  public :: job_handle
+  public :: job_result
+  public :: job_spec
   public :: process_command
   public :: process_options
   public :: process_result
@@ -115,6 +126,46 @@ module fgof_devloop_types
     logical :: failed = .false.
     logical :: timed_out = .false.
   end type devloop_supervision_result
+
+  type, public :: devloop_job_spec
+    type(job_spec) :: job
+    logical :: enabled = .false.
+    logical :: stop_before_restart = .true.
+    logical :: release_on_handoff = .false.
+    character(len=:), allocatable :: label
+  end type devloop_job_spec
+
+  type, public :: devloop_job_state
+    type(devloop_job_spec) :: spec
+    type(job_handle) :: handle
+    integer :: pid = 0
+    integer :: process_group = 0
+    integer :: signal_scope = 0
+    logical :: configured = .false.
+    logical :: attached = .false.
+    logical :: running = .false.
+    logical :: stopped = .false.
+    logical :: finished = .false.
+    logical :: cleanup_needed = .false.
+    logical :: owns_process_group = .false.
+    logical :: terminal_handoff_required = .false.
+    logical :: released = .false.
+    character(len=:), allocatable :: label
+  end type devloop_job_state
+
+  type, public :: devloop_job_plan
+    integer :: action = FGOF_DEVLOOP_JOB_ACTION_NONE
+    integer :: pid = 0
+    integer :: process_group = 0
+    integer :: signal_scope = 0
+    logical :: should_start = .false.
+    logical :: should_stop = .false.
+    logical :: should_restart = .false.
+    logical :: should_release = .false.
+    logical :: cleanup_needed = .false.
+    logical :: terminal_handoff_required = .false.
+    character(len=:), allocatable :: reason
+  end type devloop_job_plan
 
   type, public :: devloop_state
     type(devloop_options) :: options

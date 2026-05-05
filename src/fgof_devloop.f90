@@ -1,4 +1,30 @@
 module fgof_devloop
+  use fgof_jobs, only : &
+    attach_job, &
+    attach_pipeline_members, &
+    clear_job_handle, &
+    clear_job_spec, &
+    configure_job, &
+    FGOF_JOBS_SIGNAL_SCOPE_GROUP, &
+    FGOF_JOBS_TERMINAL_HANDOFF_FOREGROUND, &
+    job_continue_result, &
+    job_exit_result, &
+    job_handle, &
+    job_is_configured, &
+    job_is_finished, &
+    job_is_running, &
+    job_is_stopped, &
+    job_needs_cleanup, &
+    job_owns_process_group, &
+    job_requires_terminal_handoff, &
+    job_result, &
+    job_signal_result, &
+    job_signal_scope, &
+    job_spec, &
+    job_stop_result, &
+    make_job_spec, &
+    observe_wait_result, &
+    release_job
   use fgof_process, only : &
     FGOF_PROCESS_OK, &
     process_command, &
@@ -22,6 +48,10 @@ module fgof_devloop
     FGOF_DEVLOOP_COMMAND_NONE, &
     FGOF_DEVLOOP_COMMAND_RUN, &
     FGOF_DEVLOOP_COMMAND_SMOKE, &
+    FGOF_DEVLOOP_JOB_ACTION_NONE, &
+    FGOF_DEVLOOP_JOB_ACTION_RESTART, &
+    FGOF_DEVLOOP_JOB_ACTION_START, &
+    FGOF_DEVLOOP_JOB_ACTION_STOP, &
     FGOF_DEVLOOP_TRIGGER_CHANGE, &
     FGOF_DEVLOOP_TRIGGER_MANUAL, &
     FGOF_DEVLOOP_TRIGGER_NONE, &
@@ -30,6 +60,9 @@ module fgof_devloop
     devloop_command_spec, &
     devloop_cycle, &
     devloop_decision, &
+    devloop_job_plan, &
+    devloop_job_spec, &
+    devloop_job_state, &
     devloop_options, &
     devloop_state, &
     devloop_supervision_result, &
@@ -41,10 +74,15 @@ module fgof_devloop
   character(len=*), parameter :: FGOF_DEVLOOP_BACKEND_MODEL = "model"
 
   public :: begin_devloop_cycle
+  public :: attach_devloop_job
+  public :: attach_devloop_pipeline_members
   public :: clear_devloop_command_result
   public :: clear_devloop_command_spec
   public :: clear_devloop_cycle
   public :: clear_devloop_decision
+  public :: clear_devloop_job_plan
+  public :: clear_devloop_job_spec
+  public :: clear_devloop_job_state
   public :: clear_devloop_options
   public :: clear_devloop_state
   public :: clear_devloop_supervision_result
@@ -57,9 +95,14 @@ module fgof_devloop
   public :: devloop_command_spec
   public :: devloop_cycle
   public :: devloop_decision
+  public :: devloop_job_plan
+  public :: devloop_job_restart_plan
+  public :: devloop_job_spec
+  public :: devloop_job_state
   public :: devloop_manual_trigger
   public :: devloop_options
   public :: devloop_run_command
+  public :: devloop_service_job
   public :: devloop_smoke_command
   public :: devloop_start_trigger
   public :: devloop_state
@@ -79,10 +122,23 @@ module fgof_devloop
   public :: FGOF_DEVLOOP_COMMAND_NONE
   public :: FGOF_DEVLOOP_COMMAND_RUN
   public :: FGOF_DEVLOOP_COMMAND_SMOKE
+  public :: FGOF_DEVLOOP_JOB_ACTION_NONE
+  public :: FGOF_DEVLOOP_JOB_ACTION_RESTART
+  public :: FGOF_DEVLOOP_JOB_ACTION_START
+  public :: FGOF_DEVLOOP_JOB_ACTION_STOP
   public :: FGOF_DEVLOOP_TRIGGER_CHANGE
   public :: FGOF_DEVLOOP_TRIGGER_MANUAL
   public :: FGOF_DEVLOOP_TRIGGER_NONE
   public :: FGOF_DEVLOOP_TRIGGER_START
+  public :: job_continue_result
+  public :: job_exit_result
+  public :: job_handle
+  public :: job_result
+  public :: job_signal_result
+  public :: job_spec
+  public :: job_stop_result
+  public :: observe_devloop_job
+  public :: release_devloop_job
   public :: run_devloop_command
   public :: run_devloop_cycle
   public :: should_start_on_open
@@ -198,6 +254,52 @@ contains
     supervision%timed_out = .false.
   end function clear_devloop_supervision_result
 
+  function clear_devloop_job_spec() result(spec)
+    type(devloop_job_spec) :: spec
+
+    spec%job = clear_job_spec()
+    spec%enabled = .false.
+    spec%stop_before_restart = .true.
+    spec%release_on_handoff = .false.
+    spec%label = ""
+  end function clear_devloop_job_spec
+
+  function clear_devloop_job_state() result(job_state)
+    type(devloop_job_state) :: job_state
+
+    job_state%spec = clear_devloop_job_spec()
+    job_state%handle = clear_job_handle()
+    job_state%pid = 0
+    job_state%process_group = 0
+    job_state%signal_scope = FGOF_JOBS_SIGNAL_SCOPE_GROUP
+    job_state%configured = .false.
+    job_state%attached = .false.
+    job_state%running = .false.
+    job_state%stopped = .false.
+    job_state%finished = .false.
+    job_state%cleanup_needed = .false.
+    job_state%owns_process_group = .false.
+    job_state%terminal_handoff_required = .false.
+    job_state%released = .false.
+    job_state%label = ""
+  end function clear_devloop_job_state
+
+  function clear_devloop_job_plan() result(plan)
+    type(devloop_job_plan) :: plan
+
+    plan%action = FGOF_DEVLOOP_JOB_ACTION_NONE
+    plan%pid = 0
+    plan%process_group = 0
+    plan%signal_scope = FGOF_JOBS_SIGNAL_SCOPE_GROUP
+    plan%should_start = .false.
+    plan%should_stop = .false.
+    plan%should_restart = .false.
+    plan%should_release = .false.
+    plan%cleanup_needed = .false.
+    plan%terminal_handoff_required = .false.
+    plan%reason = ""
+  end function clear_devloop_job_plan
+
   function clear_devloop_state() result(state)
     type(devloop_state) :: state
 
@@ -300,6 +402,63 @@ contains
 
     spec = make_devloop_command(FGOF_DEVLOOP_COMMAND_SMOKE, command_value, options, label)
   end function devloop_smoke_command
+
+  function devloop_service_job(command, argv, label, background, new_process_group, signal_scope, &
+                               terminal_handoff, resume_sends_sigcont, stop_before_restart, &
+                               release_on_handoff) result(spec)
+    character(len=*), intent(in) :: command
+    character(len=*), intent(in), optional :: argv(:)
+    character(len=*), intent(in), optional :: label
+    logical, intent(in), optional :: background
+    logical, intent(in), optional :: new_process_group
+    integer, intent(in), optional :: signal_scope
+    integer, intent(in), optional :: terminal_handoff
+    logical, intent(in), optional :: resume_sends_sigcont
+    logical, intent(in), optional :: stop_before_restart
+    logical, intent(in), optional :: release_on_handoff
+    type(devloop_job_spec) :: spec
+    logical :: actual_background
+    logical :: actual_new_process_group
+    integer :: actual_signal_scope
+    integer :: actual_terminal_handoff
+    logical :: actual_resume_sends_sigcont
+
+    spec = clear_devloop_job_spec()
+
+    actual_background = .true.
+    if (present(background)) actual_background = background
+    actual_new_process_group = .true.
+    if (present(new_process_group)) actual_new_process_group = new_process_group
+    actual_signal_scope = FGOF_JOBS_SIGNAL_SCOPE_GROUP
+    if (present(signal_scope)) actual_signal_scope = signal_scope
+    actual_terminal_handoff = FGOF_JOBS_TERMINAL_HANDOFF_FOREGROUND
+    if (present(terminal_handoff)) actual_terminal_handoff = terminal_handoff
+    actual_resume_sends_sigcont = .true.
+    if (present(resume_sends_sigcont)) actual_resume_sends_sigcont = resume_sends_sigcont
+
+    if (present(argv)) then
+      spec%job = make_job_spec(command, argv, background=actual_background, &
+                               new_process_group=actual_new_process_group, &
+                               signal_scope=actual_signal_scope, &
+                               terminal_handoff=actual_terminal_handoff, &
+                               resume_sends_sigcont=actual_resume_sends_sigcont)
+    else
+      spec%job = make_job_spec(command, background=actual_background, &
+                               new_process_group=actual_new_process_group, &
+                               signal_scope=actual_signal_scope, &
+                               terminal_handoff=actual_terminal_handoff, &
+                               resume_sends_sigcont=actual_resume_sends_sigcont)
+    end if
+
+    spec%enabled = allocated(spec%job%command)
+    if (present(stop_before_restart)) spec%stop_before_restart = stop_before_restart
+    if (present(release_on_handoff)) spec%release_on_handoff = release_on_handoff
+    if (present(label)) then
+      spec%label = label
+    else if (allocated(spec%job%command)) then
+      spec%label = spec%job%command
+    end if
+  end function devloop_service_job
 
   function devloop_summarize_watch_events(events) result(summary)
     type(watch_event), intent(in) :: events(:)
@@ -456,6 +615,93 @@ contains
     supervision%decision = finish_devloop_cycle(state, supervision%succeeded, supervision%last_exit_code)
   end function run_devloop_cycle
 
+  function attach_devloop_job(spec, pid, process_group, owns_process, owns_process_group) result(job_state)
+    type(devloop_job_spec), intent(in) :: spec
+    integer, intent(in) :: pid
+    integer, intent(in), optional :: process_group
+    logical, intent(in), optional :: owns_process
+    logical, intent(in), optional :: owns_process_group
+    type(devloop_job_state) :: job_state
+    integer :: actual_process_group
+    logical :: actual_owns_process
+    logical :: actual_owns_process_group
+
+    job_state = clear_devloop_job_state()
+    if (.not. spec%enabled) return
+
+    job_state%spec = spec
+    call configure_job(job_state%handle, spec%job)
+
+    actual_process_group = pid
+    if (present(process_group)) actual_process_group = process_group
+    actual_owns_process = .true.
+    if (present(owns_process)) actual_owns_process = owns_process
+    actual_owns_process_group = actual_owns_process .and. spec%job%new_process_group .and. &
+                                actual_process_group == pid
+    if (present(owns_process_group)) actual_owns_process_group = owns_process_group
+
+    call attach_job(job_state%handle, pid, process_group=actual_process_group, &
+                    owns_process=actual_owns_process, owns_process_group=actual_owns_process_group)
+    call refresh_devloop_job_state(job_state)
+  end function attach_devloop_job
+
+  subroutine attach_devloop_pipeline_members(job_state, pids)
+    type(devloop_job_state), intent(inout) :: job_state
+    integer, intent(in) :: pids(:)
+
+    call attach_pipeline_members(job_state%handle, pids)
+    call refresh_devloop_job_state(job_state)
+  end subroutine attach_devloop_pipeline_members
+
+  subroutine observe_devloop_job(job_state, result_value)
+    type(devloop_job_state), intent(inout) :: job_state
+    type(job_result), intent(in) :: result_value
+
+    call observe_wait_result(job_state%handle, result_value)
+    call refresh_devloop_job_state(job_state)
+  end subroutine observe_devloop_job
+
+  subroutine release_devloop_job(job_state)
+    type(devloop_job_state), intent(inout) :: job_state
+
+    call release_job(job_state%handle)
+    job_state%released = .true.
+    call refresh_devloop_job_state(job_state)
+  end subroutine release_devloop_job
+
+  function devloop_job_restart_plan(job_state, trigger) result(plan)
+    type(devloop_job_state), intent(in) :: job_state
+    type(devloop_trigger), intent(in) :: trigger
+    type(devloop_job_plan) :: plan
+
+    plan = clear_devloop_job_plan()
+    plan%pid = job_state%pid
+    plan%process_group = job_state%process_group
+    plan%signal_scope = job_state%signal_scope
+    plan%cleanup_needed = job_state%cleanup_needed
+    plan%terminal_handoff_required = job_state%terminal_handoff_required
+
+    if (.not. job_state%spec%enabled) return
+    if (.not. job_state%configured) return
+    if (trigger%kind == FGOF_DEVLOOP_TRIGGER_NONE) return
+
+    if (job_state%terminal_handoff_required .and. job_state%spec%release_on_handoff) then
+      plan%should_release = .true.
+    end if
+
+    if (job_state%running .or. job_state%stopped .or. job_state%cleanup_needed) then
+      plan%action = FGOF_DEVLOOP_JOB_ACTION_RESTART
+      plan%should_restart = .true.
+      plan%should_start = .true.
+      plan%should_stop = job_state%spec%stop_before_restart
+      plan%reason = "restart existing job"
+    else
+      plan%action = FGOF_DEVLOOP_JOB_ACTION_START
+      plan%should_start = .true.
+      plan%reason = "start job"
+    end if
+  end function devloop_job_restart_plan
+
   function begin_devloop_cycle(state, trigger) result(cycle)
     type(devloop_state), intent(inout) :: state
     type(devloop_trigger), intent(in) :: trigger
@@ -595,6 +841,27 @@ contains
     supervision%process_error_code = command_result%process_error_code
     supervision%timed_out = command_result%timed_out
   end subroutine record_supervised_command
+
+  subroutine refresh_devloop_job_state(job_state)
+    type(devloop_job_state), intent(inout) :: job_state
+    logical :: was_released
+
+    was_released = job_state%released
+    job_state%configured = job_is_configured(job_state%handle)
+    job_state%attached = job_state%handle%pid > 0
+    job_state%pid = job_state%handle%pid
+    job_state%process_group = job_state%handle%process_group
+    job_state%signal_scope = job_signal_scope(job_state%handle)
+    job_state%running = job_is_running(job_state%handle)
+    job_state%stopped = job_is_stopped(job_state%handle)
+    job_state%finished = job_is_finished(job_state%handle)
+    job_state%cleanup_needed = job_needs_cleanup(job_state%handle)
+    job_state%owns_process_group = job_owns_process_group(job_state%handle)
+    job_state%terminal_handoff_required = job_requires_terminal_handoff(job_state%handle)
+    job_state%released = was_released
+    job_state%label = ""
+    if (allocated(job_state%spec%label)) job_state%label = job_state%spec%label
+  end subroutine refresh_devloop_job_state
 
   subroutine normalize_options(options)
     type(devloop_options), intent(inout) :: options
