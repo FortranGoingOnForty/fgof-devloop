@@ -20,7 +20,7 @@ Current v1 target:
 
 ## Status
 
-Sprint 03 is in place.
+Sprint 04 is in place.
 
 Tracked today:
 
@@ -34,7 +34,9 @@ Tracked today:
 - watch option projection for debounce polls, hidden-path ignores, and directory-event emission
 - `fgof-process` integration for one-shot build, run, and smoke command supervision
 - command results that retain full `process_result` output, exit, timeout, and error detail
-- focused model, watch-bridge, and process-supervision coverage in `fpm test`
+- `fgof-jobs` integration for long-running service ownership, wait observation, cleanup, and restart planning
+- pipeline-aware job observation that preserves terminal member state during group stop/continue events
+- focused model, watch-bridge, process-supervision, and job-supervision coverage in `fpm test`
 
 ## Public API Shape
 
@@ -53,6 +55,9 @@ Current public procedures:
 - `clear_devloop_command_spec`
 - `clear_devloop_command_result`
 - `clear_devloop_supervision_result`
+- `clear_devloop_job_spec`
+- `clear_devloop_job_state`
+- `clear_devloop_job_plan`
 - `devloop_backend_name`
 - `clear_devloop_state`
 - `start_devloop`
@@ -70,6 +75,12 @@ Current public procedures:
 - `devloop_smoke_command`
 - `run_devloop_command`
 - `run_devloop_cycle`
+- `devloop_service_job`
+- `attach_devloop_job`
+- `attach_devloop_pipeline_members`
+- `observe_devloop_job`
+- `release_devloop_job`
+- `devloop_job_restart_plan`
 - `begin_devloop_cycle`
 - `finish_devloop_cycle`
 
@@ -83,20 +94,26 @@ Current semantics:
 - `devloop_build_command()`, `devloop_run_command()`, and `devloop_smoke_command()` wrap `fgof-process` commands with loop roles and optional process options
 - `run_devloop_command()` executes one command spec and preserves the raw `process_result`, including stdout, stderr, exit code, timeout state, and process error details
 - `run_devloop_cycle()` starts a cycle, executes enabled build/run/smoke specs in order, skips later specs after the first failure, and feeds the outcome into `finish_devloop_cycle()`
+- `devloop_service_job()` builds a long-running service/job spec backed by `fgof-jobs`
+- `attach_devloop_job()` records an already-launched pid/process group and ownership expectations
+- `observe_devloop_job()` applies `fgof-jobs` wait results while preserving member-level terminal state
+- `devloop_job_restart_plan()` models whether a watched change should stop, start, restart, release, or require terminal handoff for a long-running job
 - `begin_devloop_cycle()` increments the cycle counter and starts work only when the loop is active, idle, and policy permits the trigger
 - `finish_devloop_cycle()` records success or failure and returns an explicit decision to idle, restart, or stop
 - negative `max_failures` values normalize to unlimited failures
 - negative `debounce_polls` values normalize to no debounce
-- Sprint 03 is intentionally one-shot and synchronous; long-running process groups and cleanup orchestration belong to the later jobs layer
+- Sprint 04 remains model-first: it plans and observes long-running job ownership, while actual spawning/signaling stays in the launcher layer
 
 ## Dependency
 
 `fgof-devloop` depends on `fgof-watch` `v0.1.0` for watch-event types and
 watch option projection, and a pinned `fgof-process` commit for one-shot
-process execution:
+process execution. It also depends on `fgof-jobs` `v0.1.0` for long-running
+job ownership and wait-state modeling:
 
 ```toml
 [dependencies]
+fgof-jobs = { git = "https://github.com/FortranGoingOnForty/fgof-jobs.git", tag = "v0.1.0" }
 fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", rev = "dd71a77c61985380c7e32f4a719fd8bb247625c7" }
 fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
 ```
