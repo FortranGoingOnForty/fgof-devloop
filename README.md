@@ -92,12 +92,12 @@ Current semantics:
 ## Dependency
 
 `fgof-devloop` depends on `fgof-watch` `v0.1.0` for watch-event types and
-watch option projection, and `fgof-process` `v0.1.0` for one-shot process
-execution:
+watch option projection, and a pinned `fgof-process` commit for one-shot
+process execution:
 
 ```toml
 [dependencies]
-fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", tag = "v0.1.0" }
+fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", rev = "dd71a77c61985380c7e32f4a719fd8bb247625c7" }
 fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
 ```
 
