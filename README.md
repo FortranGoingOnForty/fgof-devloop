@@ -4,8 +4,8 @@ Watch-driven rebuild, restart, and smoke-loop helpers for modern Fortran tools.
 
 `fgof-devloop` is intended to be a small standalone library for the reusable
 parts of development loops: deciding when file changes should trigger work,
-tracking run cycles, modeling restart policy, and eventually wiring those
-decisions to `fgof-watch`, `fgof-process`, and `fgof-jobs`.
+tracking run cycles, modeling restart policy, and layering those decisions
+over `fgof-watch`, `fgof-process`, and `fgof-jobs`.
 
 It is part of the [FortranGoingOnForty lib-modules](https://github.com/FortranGoingOnForty/lib-modules)
 catalog, but it is intended to stand on its own as a normal `fpm` package.
@@ -16,11 +16,12 @@ Current v1 target:
 - deterministic cycle and restart decision helpers
 - watch-event shaping that can consume `fgof-watch`
 - process-runner integration that can supervise rebuild and run commands
+- long-running service/job restart planning over `fgof-jobs`
 - examples for command-line tools and local service smoke loops
 
 ## Status
 
-Sprint 04 is in place.
+Sprint 05 is in place.
 
 Tracked today:
 
@@ -36,7 +37,10 @@ Tracked today:
 - command results that retain full `process_result` output, exit, timeout, and error detail
 - `fgof-jobs` integration for long-running service ownership, wait observation, cleanup, and restart planning
 - pipeline-aware job observation that preserves terminal member state during group stop/continue events
-- focused model, watch-bridge, process-supervision, and job-supervision coverage in `fpm test`
+- released jobs are treated as unmanaged and will not receive restart/stop/start plans
+- tracked examples for watch-driven command cycles and service restart planning
+- CI coverage for both `fpm test --verbose` and `fpm run --example --all`
+- focused model, watch-bridge, process-supervision, job-supervision, and example coverage
 
 ## Public API Shape
 
@@ -90,19 +94,19 @@ Current semantics:
 - `devloop_trigger` records why work should begin, such as start, file change, or manual request
 - `devloop_watch_summary` condenses `fgof-watch` event batches into file, directory, create, modify, remove, move, ignored, and failure counters
 - `devloop_watch_options()` projects dev-loop policy into `fgof-watch` options for debounce polls, hidden-path filtering, and directory event emission
-- `devloop_watch_trigger()` turns successful watch summaries into change triggers while suppressing watcher failures, empty batches, directory-only batches when disabled, and batches below `min_restart_changes`
+- `devloop_watch_trigger()` turns successful watch summaries into change triggers while suppressing watcher failures, disabled restart-on-change policy, empty batches, directory-only batches when disabled, and batches below `min_restart_changes`
 - `devloop_build_command()`, `devloop_run_command()`, and `devloop_smoke_command()` wrap `fgof-process` commands with loop roles and optional process options
 - `run_devloop_command()` executes one command spec and preserves the raw `process_result`, including stdout, stderr, exit code, timeout state, and process error details
 - `run_devloop_cycle()` starts a cycle, executes enabled build/run/smoke specs in order, skips later specs after the first failure, and feeds the outcome into `finish_devloop_cycle()`
 - `devloop_service_job()` builds a long-running service/job spec backed by `fgof-jobs`
 - `attach_devloop_job()` records an already-launched pid/process group and ownership expectations
 - `observe_devloop_job()` applies `fgof-jobs` wait results while preserving member-level terminal state
-- `devloop_job_restart_plan()` models whether a watched change should stop, start, restart, release, or require terminal handoff for a long-running job
+- `devloop_job_restart_plan()` models whether a watched change should stop, start, restart, release, or require terminal handoff for a long-running job; released jobs return no action
 - `begin_devloop_cycle()` increments the cycle counter and starts work only when the loop is active, idle, and policy permits the trigger
 - `finish_devloop_cycle()` records success or failure and returns an explicit decision to idle, restart, or stop
 - negative `max_failures` values normalize to unlimited failures
 - negative `debounce_polls` values normalize to no debounce
-- Sprint 04 remains model-first: it plans and observes long-running job ownership, while actual spawning/signaling stays in the launcher layer
+- Sprint 05 remains model-first: it plans and observes long-running job ownership, while actual spawning/signaling stays in the launcher layer
 
 ## Dependency
 
@@ -122,7 +126,15 @@ fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", ta
 
 ```bash
 fpm test
+fpm run --example --all
 ```
+
+## Examples
+
+Tracked examples live in `example/` and are intentionally deterministic:
+
+- `watch_cycle_demo.f90` shapes a synthetic watch batch into a trigger, then runs build and smoke commands through `fgof-process`
+- `service_restart_demo.f90` models restart and release behavior for a long-running service using an attached `fgof-jobs` handle
 
 ## Supported Platforms
 
@@ -135,6 +147,10 @@ fpm test
 - should remain useful on its own even if future tools wrap it with UI policy
 - watch, process, and job integration should stay layered over stable state
   transitions
+- does not spawn long-running services or send signals directly; callers own
+  launcher policy and use `devloop_job_restart_plan()` as the planning surface
+- uses a pinned `fgof-process` commit until the next process patch release tags
+  the line-wrapping CI fix
 
 ## License
 
