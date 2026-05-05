@@ -21,7 +21,7 @@ Current v1 target:
 
 ## Status
 
-Sprint 05 is in place.
+`v0.1.0` is released.
 
 Tracked today:
 
@@ -112,14 +112,14 @@ Current semantics:
 ## Dependency
 
 `fgof-devloop` depends on `fgof-watch` `v0.1.0` for watch-event types and
-watch option projection, and a pinned `fgof-process` commit for one-shot
-process execution. It also depends on `fgof-jobs` `v0.1.0` for long-running
-job ownership and wait-state modeling:
+watch option projection, `fgof-process` `v0.1.1` for one-shot process
+execution, and `fgof-jobs` `v0.1.0` for long-running job ownership and
+wait-state modeling:
 
 ```toml
 [dependencies]
 fgof-jobs = { git = "https://github.com/FortranGoingOnForty/fgof-jobs.git", tag = "v0.1.0" }
-fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", rev = "dd71a77c61985380c7e32f4a719fd8bb247625c7" }
+fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", tag = "v0.1.1" }
 fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
 ```
 
@@ -150,8 +150,7 @@ Tracked examples live in `example/` and are intentionally deterministic:
   transitions
 - does not spawn long-running services or send signals directly; callers own
   launcher policy and use `devloop_job_restart_plan()` as the planning surface
-- uses a pinned `fgof-process` commit until the next process patch release tags
-  the line-wrapping CI fix
+- uses tagged dependencies for the released process, watch, and jobs surfaces
 
 ## License
 

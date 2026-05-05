@@ -21,5 +21,5 @@ source-form = "free"
 
 [dependencies]
 fgof-jobs = { git = "https://github.com/FortranGoingOnForty/fgof-jobs.git", tag = "v0.1.0" }
-fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", rev = "dd71a77c61985380c7e32f4a719fd8bb247625c7" }
+fgof-process = { git = "https://github.com/FortranGoingOnForty/fgof-process.git", tag = "v0.1.1" }
 fgof-watch = { git = "https://github.com/FortranGoingOnForty/fgof-watch.git", tag = "v0.1.0" }
