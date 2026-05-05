@@ -7,6 +7,9 @@ program test_scaffold
     clear_devloop_command_spec, &
     clear_devloop_cycle, &
     clear_devloop_decision, &
+    clear_devloop_job_plan, &
+    clear_devloop_job_spec, &
+    clear_devloop_job_state, &
     clear_devloop_options, &
     clear_devloop_state, &
     clear_devloop_supervision_result, &
@@ -18,6 +21,9 @@ program test_scaffold
     devloop_command_spec, &
     devloop_cycle, &
     devloop_decision, &
+    devloop_job_plan, &
+    devloop_job_spec, &
+    devloop_job_state, &
     devloop_options, &
     devloop_state, &
     devloop_supervision_result, &
@@ -33,6 +39,9 @@ program test_scaffold
   type(devloop_command_spec) :: command_spec
   type(devloop_command_result) :: command_result
   type(devloop_supervision_result) :: supervision
+  type(devloop_job_spec) :: job_spec_value
+  type(devloop_job_state) :: job_state
+  type(devloop_job_plan) :: job_plan
   type(devloop_watch_summary) :: watch_summary
 
   state = clear_devloop_state()
@@ -43,6 +52,9 @@ program test_scaffold
   command_spec = clear_devloop_command_spec()
   command_result = clear_devloop_command_result()
   supervision = clear_devloop_supervision_result()
+  job_spec_value = clear_devloop_job_spec()
+  job_state = clear_devloop_job_state()
+  job_plan = clear_devloop_job_plan()
   watch_summary = clear_devloop_watch_summary()
 
   if (state%options%max_failures /= 0) error stop "devloop options should start with unlimited failures"
@@ -67,6 +79,12 @@ program test_scaffold
   if (.not. command_result%skipped) error stop "clear command result should be skipped"
   if (supervision%started) error stop "clear supervision should not be started"
   if (supervision%command_count /= 0) error stop "clear supervision should have no commands"
+  if (job_spec_value%enabled) error stop "clear job spec should be disabled"
+  if (.not. job_spec_value%stop_before_restart) error stop "job specs should stop before restart by default"
+  if (job_state%attached) error stop "clear job state should not be attached"
+  if (job_state%running) error stop "clear job state should not be running"
+  if (job_plan%should_start) error stop "clear job plan should not start"
+  if (job_plan%should_stop) error stop "clear job plan should not stop"
   if (options%stop_on_failure) error stop "clear options should not stop on failure by default"
   if (options%ignore_hidden) error stop "clear options should not ignore hidden paths by default"
   if (options%debounce_polls /= 0) error stop "clear options should not debounce by default"
